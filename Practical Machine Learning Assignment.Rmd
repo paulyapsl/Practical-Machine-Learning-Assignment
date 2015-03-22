@@ -1,0 +1,81 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Paul Yap"
+date: "19 March, 2015"
+output: html_document
+---
+#Background & Objective
+6 participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways.Participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions:
+exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+
+Source: http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf
+
+Therefore, our objective is to predict the manner in which the participants exercise (Class A - E, as the classe" variable), based on the various data sources gathered.
+
+#Exploratory Data
+```{r, echo=T,message=F, warning=F}
+setwd("/Users/paulyap/R_Stat/Coursera/8 Machine Learning/Week 3/Project")
+library(Hmisc)
+
+URLTrain<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URLTest<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(URLTrain,destfile="pml-training.csv",method="curl")
+download.file(URLTest,destfile="pml-testing.csv",method="curl")
+tblTrain<-read.csv("pml-training.csv",header=TRUE,na.strings=c("NA","#DIV/0!",""))
+tblTest<-read.csv("pml-testing.csv",header=TRUE,na.strings=c("NA","#DIV/0!",""))
+```
+The data has many potentially redundant columns and incomplete entries, as identified below.
+Fortunately, for these potentially redundant columns, approximately 98% of the data are missing in each variable field, which would render them not meaningful.
+```{r, echo=T,message=F, warning=F}
+dim(tblTrain)
+sumNAtblTrain<-apply(tblTrain,2,function(x){sum(is.na(x))})
+```
+We will then exclude these columns from the training data sets. Additional variables that are not key to our analysis are also excluded.
+```{r, echo=T,message=F, warning=F}
+#removes columns with NAs
+validTrain <- subset(tblTrain[, which(sumNAtblTrain == 0)])
+validTrain <-validTrain[,colnames(validTrain)%nin%c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')]
+```
+
+#Proposed Approach: Random Forest Model
+As this is a non-linear prediction model requiring high level of accuracy, a Random Forest prediction modelling is adopted.
+
+```{r, echo=T,message=F, warning=F}
+library(caret)
+library(randomForest)
+set.seed(100)
+inTrain <- createDataPartition(y=validTrain$classe, p=0.7, list=F)
+training <- validTrain[inTrain,]
+testing <- validTrain[-inTrain,]
+model <- randomForest(classe ~., data=training, type="classification")
+```
+
+#Evaluating the model using training and testing sets
+The results from the training sets suggest a very highly accurate model (in-sample accuracy of 100%, that is the rate at which its prediction is correct); we then put our prediction model to the test using the testing set, which had not been used to build our prediction model.
+
+We should reasonably expect that the testing set (out-of-sample) will achieve a lower level of accuracy. Let's now dwell deeper into the out of sample error, with an estimation of the error using the appropriate cross-validation test technique (confusionMatrix).
+
+```{r, echo=T}
+predmodeltrain <- predict(model,newdata=training)
+confusionMatrix(predmodeltrain,training$classe)$table
+```
+
+##Out of Sample Cross Validation Test
+The results from the out-of-sample set suggests that our prediction model is still highly accurate (out-of-sample accuracy of 99.6%), despite some incorrect predictions (26 out of 5,887). It also has high specificity (predicting "No" when it is actually "No") and sensitivity (predicting "Yes" when it is actually "Yes").
+```{r, echo=T}
+predmodeltest <- predict(model,newdata=testing)
+confusionMatrix(predmodeltest,testing$classe)
+```
+
+#Conclusion
+It is perhaps unusual to be getting such a high level of accuracy that is close to 100% for both the in-sample and out-of-sample sets. Given that only 6 participants were involved, the results collected could be biased, with more predictable behaviours and less variances in the variables. With more diverse participants, the predictability/ accuracy of the model is likely to be reduced. 
+
+#Appendix
+Running the Course Project Submission
+```{r, echo=T}
+tblTest<-read.csv("pml-testing.csv",header=TRUE,na.strings=c("NA","#DIV/0!",""))
+sumNAtblTest<-apply(tblTest,2,function(x){sum(is.na(x))})
+validtblTest <- subset(tblTest[, which(sumNAtblTest == 0)])
+validtblTest <-validtblTest[,colnames(validtblTest)%nin%c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')]
+predvalidtblTest <- predict(model,newdata=validtblTest)
+```
